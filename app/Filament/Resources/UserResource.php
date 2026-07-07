@@ -96,6 +96,35 @@ class UserResource extends Resource
             ->recordActions([
                 ViewAction::make(),
                 EditAction::make(),
+                \Filament\Tables\Actions\Action::make('pushToDevice')
+                    ->icon('heroicon-o-arrow-up-on-square')
+                    ->color('success')
+                    ->label('Push to Device')
+                    ->form([
+                        \Filament\Forms\Components\Select::make('device_id')
+                            ->label('Select Device')
+                            ->options(\App\Models\Device::pluck('name', 'id'))
+                            ->required(),
+                    ])
+                    ->action(function (User $record, array $data) {
+                        $device = \App\Models\Device::find($data['device_id']);
+                        
+                        if ($device) {
+                            app(\App\Services\Attendance\DeviceCommandBuilder::class)->addUser($device, [
+                                'pin' => $record->pin,
+                                'name' => $record->name,
+                                'card' => $record->card_number,
+                                'privilege' => $record->privilege,
+                                'group' => $record->group,
+                            ]);
+                            
+                            \Filament\Notifications\Notification::make()
+                                ->title('Command queued')
+                                ->body('The user will be synced to the device shortly.')
+                                ->success()
+                                ->send();
+                        }
+                    }),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
