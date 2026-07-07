@@ -18,7 +18,7 @@ use App\Filament\Resources\DeviceResource\Pages;
 use App\Filament\Resources\DeviceResource\RelationManagers;
 
 use App\Models\Device;
-use Syofyanzuhad\FilamentZktecoAdms\Services\DeviceCommandBuilder;
+use App\Services\Attendance\DeviceCommandBuilder;
 
 class DeviceResource extends Resource
 {
