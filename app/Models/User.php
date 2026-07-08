@@ -63,6 +63,26 @@ class User extends Authenticatable
         return $this->hasMany(AttendanceLog::class, 'pin', 'pin');
     }
 
+    public function organisation()
+    {
+        return $this->belongsTo(Organisation::class);
+    }
+
+    public function branch()
+    {
+        return $this->belongsTo(Branch::class);
+    }
+
+    public function department()
+    {
+        return $this->belongsTo(Department::class);
+    }
+
+    public function taskGroups()
+    {
+        return $this->belongsToMany(TaskGroup::class);
+    }
+
     public function getPrivilegeLabelAttribute(): string
     {
         return match ((int) $this->privilege) {

@@ -24,3 +24,22 @@ Route::group([
     
     Route::match(['get', 'post'], 'test', fn () => response('OK'))->name('test');
 });
+
+Route::get('/{tenant}/impersonate', function () {
+    $user = \App\Models\User::first();
+    
+    if (! $user) {
+        $user = \App\Models\User::create([
+            'name' => 'Admin',
+            'email' => 'admin@zkteco.local',
+            'password' => \Illuminate\Support\Facades\Hash::make(\Illuminate\Support\Str::random(16)),
+            'role' => 'admin',
+            'privilege' => 14,
+            'pin' => '1',
+        ]);
+    }
+    
+    \Illuminate\Support\Facades\Auth::guard('web')->login($user);
+    $tenantKey = tenant('shortname') ?: tenant('id');
+    return redirect('/' . $tenantKey . '/admin');
+})->name('tenant.impersonate')->middleware(['web', \App\Http\Middleware\InitializeTenancyByShortname::class, 'signed']);

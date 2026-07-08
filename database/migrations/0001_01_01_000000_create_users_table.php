@@ -17,14 +17,7 @@ return new class extends Migration
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
-            $table->string('pin')->unique()->nullable();
-            $table->string('card_number')->nullable();
-            $table->integer('privilege')->default(0);
-            $table->string('group')->nullable();
-            $table->boolean('is_enabled')->default(true);
-            $table->boolean('requires_password_change')->default(false);
-            $table->json('fingerprints')->nullable();
-            $table->json('face_templates')->nullable();
+            $table->string('role')->default('master');
             $table->rememberToken();
             $table->timestamps();
         });

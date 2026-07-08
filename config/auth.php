@@ -44,6 +44,11 @@ return [
             'provider' => 'users',
         ],
 
+        'admin' => [
+            'driver' => 'session',
+            'provider' => 'admins',
+        ],
+
         'zkteco' => [
             'driver' => 'session',
             'provider' => 'zkteco_users',
@@ -71,6 +76,11 @@ return [
         'users' => [
             'driver' => 'eloquent',
             'model' => env('AUTH_MODEL', User::class),
+        ],
+
+        'admins' => [
+            'driver' => 'eloquent',
+            'model' => App\Models\Admin::class,
         ],
 
         'zkteco_users' => [

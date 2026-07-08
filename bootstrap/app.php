@@ -15,6 +15,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: [
             'iclock/*',
         ]);
+
+        $middleware->prependToGroup('web', \App\Http\Middleware\InitializeTenancyForLivewire::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
