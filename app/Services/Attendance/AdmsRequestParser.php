@@ -50,10 +50,51 @@ class AdmsRequestParser
                 $operations[] = $this->parseFingerprintLine($line);
             } elseif (str_starts_with($line, 'FACE')) {
                 $operations[] = $this->parseFaceLine($line);
+            } elseif (str_starts_with($line, 'OPLOG')) {
+                $op = $this->parseOpLogLine($line);
+                if ($op) {
+                    $operations[] = $op;
+                }
             }
         }
 
         return $operations;
+    }
+
+    protected function parseOpLogLine(string $line): ?array
+    {
+        // Format: OPLOG 70\t2\t2026-07-07 20:36:25\t0\t0\t0\t0
+        $fields = explode("\t", substr($line, 6)); // skip "OPLOG "
+        if (count($fields) < 2) {
+            return null;
+        }
+
+        $type = (int) trim($fields[0]);
+        $pin = trim($fields[1]);
+
+        if ($type === 70) { // Enroll User
+            return [
+                'type' => 'user',
+                'pin' => $pin,
+            ];
+        }
+
+        if ($type === 71) { // Enroll FP
+            return [
+                'type' => 'fingerprint',
+                'pin' => $pin,
+                'fid' => isset($fields[3]) ? trim($fields[3]) : 0,
+            ];
+        }
+
+        if ($type === 4 || $type === 36) { // Change Privilege / Password
+            return [
+                'type' => 'user_update_needed',
+                'pin' => $pin,
+            ];
+        }
+
+        return null;
     }
 
     protected function parseUserLine(string $line): array

@@ -53,6 +53,11 @@ class DeviceCommandBuilder
         return $this->createCommand($device, 'DATA', "DATA DEL_USER PIN={$pin}");
     }
 
+    public function queryUser(Device $device, string $pin): DeviceCommand
+    {
+        return $this->createCommand($device, 'DATA', "DATA QUERY USERINFO PIN={$pin}");
+    }
+
     public function checkConnection(Device $device): DeviceCommand
     {
         return $this->createCommand($device, 'CHECK', 'CHECK');

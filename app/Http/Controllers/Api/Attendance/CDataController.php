@@ -71,6 +71,13 @@ class CDataController extends Controller
     {
         $body = $request->getContent();
         $stamp = $request->query('Stamp');
+        
+        \Illuminate\Support\Facades\Log::info("ADMS Data Received", [
+            'device' => $device->serial_number,
+            'table' => $table,
+            'stamp' => $stamp,
+            'body' => $body,
+        ]);
 
         switch (strtoupper($table)) {
             case 'ATTLOG':
@@ -96,11 +103,26 @@ class CDataController extends Controller
         $modelClass = config('zkteco-adms.models.attendance_log', AttendanceLog::class);
 
         foreach ($logs as $log) {
+            $status = $log['status'];
+
+            if ($device->punch_behavior === 'always_in') {
+                $status = 0; // Check In
+            } elseif ($device->punch_behavior === 'always_out') {
+                $status = 1; // Check Out
+            } elseif ($device->punch_behavior === 'auto') {
+                $lastLog = $modelClass::where('pin', $log['pin'])
+                    ->whereDate('punched_at', \Carbon\Carbon::parse($log['punched_at'])->toDateString())
+                    ->orderBy('punched_at', 'desc')
+                    ->first();
+                
+                $status = ($lastLog && $lastLog->status === 0) ? 1 : 0;
+            }
+
             $record = $modelClass::create([
                 'device_id' => $device->id,
                 'pin' => $log['pin'],
                 'punched_at' => $log['punched_at'],
-                'status' => $log['status'],
+                'status' => $status,
                 'verify_type' => $log['verify_type'],
                 'work_code' => $log['work_code'],
                 'reserved_1' => $log['reserved_1'],
@@ -123,24 +145,29 @@ class CDataController extends Controller
     protected function processOperationLogs(Device $device, string $body, ?string $stamp): void
     {
         $operations = $this->parser->parseOperationLogs($body);
-        $userModel = config('zkteco-adms.models.user', ZktecoUser::class);
+        $userModel = config('zkteco-adms.models.user', User::class);
 
         foreach ($operations as $op) {
             if ($op['type'] === 'user' && isset($op['pin'])) {
+                $updateData = [];
+                if (array_key_exists('name', $op)) $updateData['name'] = $op['name'];
+                if (array_key_exists('card', $op)) $updateData['card_number'] = $op['card'];
+                if (array_key_exists('privilege', $op) || array_key_exists('pri', $op)) $updateData['privilege'] = (int) ($op['privilege'] ?? $op['pri'] ?? 0);
+                if (array_key_exists('password', $op) || array_key_exists('passwd', $op)) $updateData['device_password'] = $op['password'] ?? $op['passwd'];
+                if (array_key_exists('group', $op) || array_key_exists('grp', $op)) $updateData['group'] = $op['group'] ?? $op['grp'];
+
                 $user = $userModel::updateOrCreate(
                     ['pin' => $op['pin']],
-                    [
-                        'name' => $op['name'] ?? null,
-                        'card_number' => $op['card'] ?? null,
-                        'privilege' => (int) ($op['privilege'] ?? $op['pri'] ?? 0),
-                        'password' => $op['password'] ?? $op['passwd'] ?? null,
-                        'group' => $op['group'] ?? $op['grp'] ?? null,
-                    ]
+                    $updateData
                 );
 
                 if (config('zkteco-adms.events.dispatch_user_synced', true)) {
                     event(new UserSynced($user, $device));
                 }
+            }
+
+            if ($op['type'] === 'user_update_needed' && isset($op['pin'])) {
+                app(\App\Services\Attendance\DeviceCommandBuilder::class)->queryUser($device, $op['pin']);
             }
 
             if ($op['type'] === 'fingerprint' && isset($op['pin'])) {

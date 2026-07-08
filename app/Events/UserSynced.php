@@ -13,7 +13,7 @@ class UserSynced
     use SerializesModels;
 
     public function __construct(
-        public ZktecoUser $user,
+        public User $user,
         public Device $device
     ) {}
 }

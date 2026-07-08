@@ -40,22 +40,35 @@ class UserResource extends Resource
             Section::make('User Information')
                 ->schema([
                     TextInput::make('pin')
+                        ->label('User ID (PIN)')
                         ->required()
-                        ->unique(ignoreRecord: true),
-                    TextInput::make('name'),
+                        ->unique(ignoreRecord: true)
+                        ->autocomplete('off'),
+                    TextInput::make('name')
+                        ->autocomplete('off'),
                     TextInput::make('email')
                         ->email()
                         ->unique(ignoreRecord: true)
-                        ->nullable(),
+                        ->nullable()
+                        ->autocomplete('off'),
                     TextInput::make('card_number')
-                        ->label('Card Number'),
+                        ->label('Card Number')
+                        ->autocomplete('off'),
                     Select::make('privilege')
                         ->options([
                             0 => 'User',
                             14 => 'Admin',
                         ])
                         ->default(0),
-                    TextInput::make('group'),
+                    TextInput::make('group')
+                        ->autocomplete('off'),
+                    TextInput::make('device_password')
+                        ->label('Device Password (Numeric)')
+                        ->numeric()
+                        ->maxLength(8)
+                        ->password()
+                        ->revealable()
+                        ->autocomplete('new-password'),
                     Toggle::make('is_enabled')
                         ->default(true),
                 ])
@@ -96,7 +109,7 @@ class UserResource extends Resource
             ->recordActions([
                 ViewAction::make(),
                 EditAction::make(),
-                \Filament\Tables\Actions\Action::make('pushToDevice')
+                \Filament\Actions\Action::make('pushToDevice')
                     ->icon('heroicon-o-arrow-up-on-square')
                     ->color('success')
                     ->label('Push to Device')
@@ -116,6 +129,7 @@ class UserResource extends Resource
                                 'card' => $record->card_number,
                                 'privilege' => $record->privilege,
                                 'group' => $record->group,
+                                'password' => $record->device_password,
                             ]);
                             
                             \Filament\Notifications\Notification::make()
@@ -126,9 +140,37 @@ class UserResource extends Resource
                         }
                     }),
             ])
-            ->toolbarActions([
-                BulkActionGroup::make([
-                    DeleteBulkAction::make(),
+            ->bulkActions([
+                \Filament\Actions\BulkActionGroup::make([
+                    \Filament\Actions\DeleteBulkAction::make(),
+                    \Filament\Actions\BulkAction::make('deleteFromDevice')
+                        ->icon('heroicon-o-trash')
+                        ->color('danger')
+                        ->label('Delete from Device')
+                        ->form([
+                            \Filament\Forms\Components\Select::make('device_id')
+                                ->label('Select Device')
+                                ->options(\App\Models\Device::pluck('name', 'id'))
+                                ->required(),
+                        ])
+                        ->action(function (\Illuminate\Database\Eloquent\Collection $records, array $data) {
+                            $device = \App\Models\Device::find($data['device_id']);
+                            
+                            if ($device) {
+                                $count = 0;
+                                foreach ($records as $record) {
+                                    app(\App\Services\Attendance\DeviceCommandBuilder::class)->deleteUser($device, $record->pin);
+                                    $count++;
+                                }
+                                
+                                \Filament\Notifications\Notification::make()
+                                    ->title('Commands queued')
+                                    ->body("{$count} users will be deleted from the device shortly.")
+                                    ->success()
+                                    ->send();
+                            }
+                        })
+                        ->deselectRecordsAfterCompletion(),
                 ]),
             ]);
     }

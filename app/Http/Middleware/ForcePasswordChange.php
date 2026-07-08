@@ -20,14 +20,14 @@ class ForcePasswordChange
         $user = Auth::user();
 
         if ($user && $user->requires_password_change) {
-            if (!$request->routeIs('filament.admin.pages.profile') && !$request->routeIs('filament.admin.auth.logout')) {
+            if (!$request->routeIs('filament.admin.auth.profile') && !$request->routeIs('filament.admin.auth.logout')) {
                 \Filament\Notifications\Notification::make()
                     ->warning()
                     ->title('Action Required')
                     ->body('You must change your default password to continue.')
                     ->send();
 
-                return redirect()->route('filament.admin.pages.profile');
+                return redirect()->route('filament.admin.auth.profile');
             }
         }
 

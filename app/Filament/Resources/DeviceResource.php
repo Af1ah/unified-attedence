@@ -58,6 +58,15 @@ class DeviceResource extends Resource
                             'unknown' => 'Unknown',
                         ])
                         ->default('unknown'),
+                    Select::make('punch_behavior')
+                        ->options([
+                            'device_state' => 'Device State (Default)',
+                            'always_in' => 'Always In',
+                            'always_out' => 'Always Out',
+                            'auto' => 'Auto (Alternating)',
+                        ])
+                        ->default('device_state')
+                        ->helperText('Determines if logs from this device are Check-In, Check-Out, or handled automatically.'),
                 ])
                 ->columns(2)
                 ->columnSpanFull(),
