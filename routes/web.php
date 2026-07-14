@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\Attendance\GetRequestController;
 
 Route::group([
     'prefix' => 'iclock',
+    'middleware' => [\App\Http\Middleware\IdentifyTenantByDeviceSN::class],
 ], function () {
     Route::match(['get', 'post'], 'cdata', CDataController::class)->name('cdata');
     Route::match(['get', 'post'], 'cdata.aspx', CDataController::class);

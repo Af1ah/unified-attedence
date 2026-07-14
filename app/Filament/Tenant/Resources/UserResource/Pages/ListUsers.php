@@ -18,34 +18,39 @@ class ListUsers extends ListRecords
                 ->icon('heroicon-o-arrow-path')
                 ->color('success')
                 ->label('Sync Users')
-                ->form([
-                    \Filament\Forms\Components\Select::make('device_id')
-                        ->label('Select Device')
-                        ->options(\App\Models\Device::pluck('name', 'id'))
-                        ->required(),
-                ])
-                ->action(function (array $data) {
-                    $device = \App\Models\Device::find($data['device_id']);
+                ->action(function () {
+                    $devices = \App\Models\Device::all();
+                    $successCount = 0;
+                    $errors = [];
                     
-                    if ($device) {
-                        $records = \App\Models\User::all();
-                        $count = 0;
-                        foreach ($records as $record) {
-                            app(\App\Services\Attendance\DeviceCommandBuilder::class)->addUser($device, [
-                                'pin' => $record->pin,
-                                'name' => $record->name,
-                                'card' => $record->card_number,
-                                'privilege' => $record->privilege,
-                                'group' => $record->group,
-                                'password' => $record->device_password,
-                            ]);
-                            $count++;
-                        }
+                    if ($devices->isEmpty()) {
+                        \Filament\Notifications\Notification::make()->title('No Devices')->body('There are no devices to sync from.')->warning()->send();
+                        return;
+                    }
+
+                    foreach ($devices as $device) {
+                        $result = app(\App\Services\Attendance\DirectDeviceService::class)->syncUsersFromDevice($device);
                         
+                        if ($result['status']) {
+                            $successCount++;
+                        } else {
+                            $errors[] = ($device->name ?: $device->serial_number) . ": " . $result['message'];
+                        }
+                    }
+                    
+                    if ($successCount > 0) {
                         \Filament\Notifications\Notification::make()
-                            ->title('Commands queued')
-                            ->body("{$count} users will be synced to the device shortly.")
+                            ->title('Success')
+                            ->body("Successfully synced users from {$successCount} device(s).")
                             ->success()
+                            ->send();
+                    }
+                    
+                    if (count($errors) > 0) {
+                        \Filament\Notifications\Notification::make()
+                            ->title('Some syncs failed')
+                            ->body(implode(', ', $errors))
+                            ->danger()
                             ->send();
                     }
                 }),

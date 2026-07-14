@@ -98,4 +98,62 @@ class User extends Authenticatable
             && filled($this->email)
             && filled($this->password);
     }
+
+    public function getActiveSchedule(?\Carbon\Carbon $date = null)
+    {
+        $date = $date ?? now();
+
+        $groupSchedule = Schedule::where('status', true)
+            ->where('target_type', TaskGroup::class)
+            ->whereIn('target_id', $this->taskGroups()->pluck('task_groups.id'))
+            ->where(function ($query) use ($date) {
+                $query->whereNull('valid_from')->orWhere('valid_from', '<=', $date);
+            })
+            ->where(function ($query) use ($date) {
+                $query->whereNull('valid_to')->orWhere('valid_to', '>=', $date);
+            })
+            ->first();
+
+        if ($groupSchedule) return $groupSchedule;
+
+        if ($this->department_id) {
+            $deptSchedule = Schedule::where('status', true)
+                ->where('target_type', Department::class)
+                ->where('target_id', $this->department_id)
+                ->where(function ($query) use ($date) {
+                    $query->whereNull('valid_from')->orWhere('valid_from', '<=', $date);
+                })
+                ->where(function ($query) use ($date) {
+                    $query->whereNull('valid_to')->orWhere('valid_to', '>=', $date);
+                })
+                ->first();
+            
+            if ($deptSchedule) return $deptSchedule;
+        }
+
+        if ($this->branch_id) {
+            $branchSchedule = Schedule::where('status', true)
+                ->where('target_type', Branch::class)
+                ->where('target_id', $this->branch_id)
+                ->where(function ($query) use ($date) {
+                    $query->whereNull('valid_from')->orWhere('valid_from', '<=', $date);
+                })
+                ->where(function ($query) use ($date) {
+                    $query->whereNull('valid_to')->orWhere('valid_to', '>=', $date);
+                })
+                ->first();
+            
+            if ($branchSchedule) return $branchSchedule;
+        }
+
+        return Schedule::where('status', true)
+            ->whereNull('target_type')
+            ->where(function ($query) use ($date) {
+                $query->whereNull('valid_from')->orWhere('valid_from', '<=', $date);
+            })
+            ->where(function ($query) use ($date) {
+                $query->whereNull('valid_to')->orWhere('valid_to', '>=', $date);
+            })
+            ->first();
+    }
 }

@@ -134,6 +134,21 @@ class DeviceResource extends Resource
                     ->modalHeading('Clear Device Logs')
                     ->modalDescription('Are you sure you want to clear all attendance logs on this device?')
                     ->action(fn (Device $record) => app(DeviceCommandBuilder::class)->clearAttendanceLogs($record)),
+                Action::make('sync_users')
+                    ->label('Sync Users')
+                    ->icon('heroicon-o-users')
+                    ->color('success')
+                    ->requiresConfirmation()
+                    ->modalHeading('Sync Users via ZKLib')
+                    ->modalDescription('Are you sure you want to connect directly to the device via port 4370 to fetch all users, active fingerprints, and RFID cards?')
+                    ->action(function (Device $record) {
+                        $result = app(\App\Services\Attendance\DirectDeviceService::class)->syncUsersFromDevice($record);
+                        if ($result['status']) {
+                            \Filament\Notifications\Notification::make()->title('Success')->body($result['message'])->success()->send();
+                        } else {
+                            \Filament\Notifications\Notification::make()->title('Failed')->body($result['message'])->danger()->send();
+                        }
+                    }),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

@@ -106,55 +106,49 @@ class UserResource extends Resource
                     ->color(fn ($state): string => $state === 14 ? 'primary' : 'gray'),
                 Tables\Columns\IconColumn::make('is_enabled')
                     ->boolean(),
-                Tables\Columns\TextColumn::make('attendance_logs_count')
-                    ->counts('attendanceLogs')
-                    ->label('Attendance Count'),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('privilege')
                     ->options([
                         0 => 'User',
                         14 => 'Admin',
-                    ]),
-                Tables\Filters\TernaryFilter::make('is_enabled'),
+                    ])
+                    ->default(0),
+                Tables\Filters\TernaryFilter::make('is_enabled')
+                    ->default(true),
             ])
             ->recordActions([
-                ViewAction::make(),
                 EditAction::make(),
-                \Filament\Actions\Action::make('pushToDevice')
-                    ->icon('heroicon-o-arrow-up-on-square')
-                    ->color('success')
-                    ->label('Push to Device')
-                    ->form([
-                        \Filament\Forms\Components\Select::make('device_id')
-                            ->label('Select Device')
-                            ->options(\App\Models\Device::pluck('name', 'id'))
-                            ->required(),
-                    ])
-                    ->action(function (User $record, array $data) {
-                        $device = \App\Models\Device::find($data['device_id']);
-                        
-                        if ($device) {
-                            app(\App\Services\Attendance\DeviceCommandBuilder::class)->addUser($device, [
-                                'pin' => $record->pin,
-                                'name' => $record->name,
-                                'card' => $record->card_number,
-                                'privilege' => $record->privilege,
-                                'group' => $record->group,
-                                'password' => $record->device_password,
-                            ]);
-                            
-                            \Filament\Notifications\Notification::make()
-                                ->title('Command queued')
-                                ->body('The user will be synced to the device shortly.')
-                                ->success()
-                                ->send();
-                        }
-                    }),
             ])
             ->bulkActions([
                 \Filament\Actions\BulkActionGroup::make([
                     \Filament\Actions\DeleteBulkAction::make(),
+                    \Filament\Actions\BulkAction::make('pushToDevice')
+                        ->icon('heroicon-o-arrow-up-on-square')
+                        ->color('success')
+                        ->label('Push to Device')
+                        ->form([
+                            \Filament\Forms\Components\Select::make('device_id')
+                                ->label('Select Device')
+                                ->options(\App\Models\Device::all()->mapWithKeys(fn($d) => [$d->id => $d->name ?: $d->serial_number])->toArray())
+                                ->default(fn() => \App\Models\Device::count() === 1 ? \App\Models\Device::first()->id : null)
+                                ->hidden(fn() => \App\Models\Device::count() <= 1)
+                                ->required(),
+                        ])
+                        ->action(function (\Illuminate\Database\Eloquent\Collection $records, array $data) {
+                            $deviceId = $data['device_id'] ?? \App\Models\Device::first()?->id;
+                            $device = \App\Models\Device::find($deviceId);
+                            
+                            if ($device) {
+                                $result = app(\App\Services\Attendance\DirectDeviceService::class)->pushUsersToDevice($device, $records);
+                                if ($result['status']) {
+                                    \Filament\Notifications\Notification::make()->title('Success')->body($result['message'])->success()->send();
+                                } else {
+                                    \Filament\Notifications\Notification::make()->title('Failed')->body($result['message'])->danger()->send();
+                                }
+                            }
+                        })
+                        ->deselectRecordsAfterCompletion(),
                     \Filament\Actions\BulkAction::make('deleteFromDevice')
                         ->icon('heroicon-o-trash')
                         ->color('danger')
@@ -162,7 +156,7 @@ class UserResource extends Resource
                         ->form([
                             \Filament\Forms\Components\Select::make('device_id')
                                 ->label('Select Device')
-                                ->options(\App\Models\Device::pluck('name', 'id'))
+                                ->options(\App\Models\Device::all()->mapWithKeys(fn($d) => [$d->id => $d->name ?: $d->serial_number])->toArray())
                                 ->required(),
                         ])
                         ->action(function (\Illuminate\Database\Eloquent\Collection $records, array $data) {
