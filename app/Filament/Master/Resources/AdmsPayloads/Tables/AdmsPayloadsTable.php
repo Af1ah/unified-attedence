@@ -52,7 +52,7 @@ class AdmsPayloadsTable
             ])
             ->recordActions([
                 ViewAction::make(),
-                \Filament\Tables\Actions\Action::make('retry')
+                \Filament\Actions\Action::make('retry')
                     ->label('Retry')
                     ->icon('heroicon-o-arrow-path')
                     ->color('warning')

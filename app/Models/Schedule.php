@@ -8,6 +8,7 @@ class Schedule extends Model
 {
     protected $fillable = [
         'name',
+        'type',
         'target_type',
         'target_id',
         'valid_from',

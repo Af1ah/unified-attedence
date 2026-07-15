@@ -23,6 +23,20 @@ class Organisation extends BaseTenant implements TenantWithDatabase
         'brand_color',
     ];
 
+    public static function getCustomColumns(): array
+    {
+        return [
+            'id',
+            'name',
+            'shortname',
+            'db_name',
+            'email',
+            'phone',
+            'logo',
+            'brand_color',
+        ];
+    }
+
     public function branches()
     {
         return $this->hasMany(Branch::class);
@@ -31,5 +45,10 @@ class Organisation extends BaseTenant implements TenantWithDatabase
     public function departments()
     {
         return $this->hasMany(Department::class);
+    }
+
+    public function resolveRouteBinding($value, $field = null)
+    {
+        return $this->where('shortname', $value)->orWhere('id', $value)->firstOrFail();
     }
 }
