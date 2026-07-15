@@ -40,7 +40,7 @@
                                         </div>
                                         <span class="text-xs text-gray-500 dark:text-gray-400 hover:text-primary-600 transition-colors" 
                                               style="cursor: pointer; display: inline-flex; align-items: center; gap: 0.25rem;"
-                                              @click="$wire.mountAction('editBreak', { id: brk.id }, { schemaComponent: '{{ $getStatePath() }}' })" 
+                                              @click="$wire.mountAction('editBreak', { id: brk.id }, { schemaComponent: '{{ $field->getKey() }}' })" 
                                               title="Edit Default Break">
                                             <span>
                                                 <span x-text="brk.start"></span> • <span x-text="brk.duration"></span>&thinsp;<span x-text="brk.duration_unit"></span>
@@ -96,7 +96,7 @@
                                         <div style="display: flex; align-items: center; gap: 0.5rem;" x-show="days[dayKey].is_working">
                                             <x-filament::input.checkbox x-model="days[dayKey].breaks[brk.id].is_active" @change="updateState()" title="Enable this break for the day" />
                                             <div x-show="days[dayKey].breaks[brk.id].is_active" style="flex: 1; display: flex; flex-direction: column; gap: 0.25rem; cursor: pointer;" 
-                                                 @click="$wire.mountAction('editDayBreak', { id: brk.id, day: dayKey }, { schemaComponent: '{{ $getStatePath() }}' })" 
+                                                 @click="$wire.mountAction('editDayBreak', { id: brk.id, day: dayKey }, { schemaComponent: '{{ $field->getKey() }}' })" 
                                                  class="group"
                                                  title="Edit Special Time & Duration">
                                                 <div style="display: flex; align-items: center; gap: 0.25rem;">
