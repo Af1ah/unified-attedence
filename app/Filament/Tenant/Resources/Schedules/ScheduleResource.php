@@ -20,6 +20,12 @@ class ScheduleResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
+    protected static ?string $modelLabel = 'Shift and schedule';
+
+    protected static ?string $pluralModelLabel = 'Shifts and schedules';
+
+    protected static ?string $navigationLabel = 'Shifts and schedules';
+
     protected static ?string $recordTitleAttribute = 'name';
 
     public static function form(Schema $schema): Schema

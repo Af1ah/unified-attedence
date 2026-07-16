@@ -72,8 +72,6 @@ class UserResource extends Resource
                             14 => 'Admin',
                         ])
                         ->default(0),
-                    TextInput::make('group')
-                        ->autocomplete('off'),
                     TextInput::make('device_password')
                         ->label('Device Password (Numeric)')
                         ->numeric()
@@ -86,6 +84,25 @@ class UserResource extends Resource
                 ])
                 ->columns(2)
                 ->columnSpanFull(),
+            Section::make('Enrollment Details')
+                ->schema([
+                    Select::make('branch_id')
+                        ->relationship('branch', 'name')
+                        ->label('Branch')
+                        ->nullable(),
+                    Select::make('department_id')
+                        ->relationship('department', 'name')
+                        ->label('Department')
+                        ->nullable(),
+                    TextInput::make('group')
+                        ->label('Designation / Group')
+                        ->datalist(fn () => \App\Models\User::whereNotNull('group')->where('group', '!=', '')->distinct()->pluck('group')->toArray())
+                        ->autocomplete('off')
+                        ->nullable(),
+                ])
+                ->columns(3)
+                ->columnSpanFull()
+                ->collapsed(),
         ]);
     }
 
@@ -99,7 +116,23 @@ class UserResource extends Resource
                 Tables\Columns\TextColumn::make('name')
                     ->searchable(),
                 Tables\Columns\TextColumn::make('card_number')
-                    ->label('Card'),
+                    ->label('Card')
+                    ->toggleable(isToggledHiddenByDefault: true),
+                Tables\Columns\TextColumn::make('branch.name')
+                    ->label('Branch')
+                    ->sortable()
+                    ->searchable()
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('department.name')
+                    ->label('Department')
+                    ->sortable()
+                    ->searchable()
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('group')
+                    ->label('Designation/Group')
+                    ->sortable()
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('privilege')
                     ->badge()
                     ->formatStateUsing(fn ($state) => $state === 14 ? 'Admin' : 'User')
@@ -114,6 +147,15 @@ class UserResource extends Resource
                         14 => 'Admin',
                     ])
                     ->default(0),
+                Tables\Filters\SelectFilter::make('branch_id')
+                    ->relationship('branch', 'name')
+                    ->label('Branch'),
+                Tables\Filters\SelectFilter::make('department_id')
+                    ->relationship('department', 'name')
+                    ->label('Department'),
+                Tables\Filters\SelectFilter::make('group')
+                    ->label('Designation / Group')
+                    ->options(fn () => \App\Models\User::whereNotNull('group')->where('group', '!=', '')->distinct()->pluck('group', 'group')->toArray()),
                 Tables\Filters\TernaryFilter::make('is_enabled')
                     ->default(true),
             ])
@@ -172,6 +214,46 @@ class UserResource extends Resource
                                 \Filament\Notifications\Notification::make()
                                     ->title('Commands queued')
                                     ->body("{$count} users will be deleted from the device shortly.")
+                                    ->success()
+                                    ->send();
+                            }
+                        })
+                        ->deselectRecordsAfterCompletion(),
+                    \Filament\Actions\BulkAction::make('assignCategory')
+                        ->label('Assign Category')
+                        ->icon('heroicon-o-tag')
+                        ->form([
+                            \Filament\Forms\Components\Select::make('branch_id')
+                                ->label('Branch')
+                                ->options(\App\Models\Branch::pluck('name', 'id'))
+                                ->nullable(),
+                            \Filament\Forms\Components\Select::make('department_id')
+                                ->label('Department')
+                                ->options(\App\Models\Department::pluck('name', 'id'))
+                                ->nullable(),
+                            \Filament\Forms\Components\TextInput::make('group')
+                                ->label('Group')
+                                ->nullable(),
+                        ])
+                        ->action(function (\Illuminate\Database\Eloquent\Collection $records, array $data) {
+                            $updateData = [];
+                            if (array_key_exists('branch_id', $data)) {
+                                $updateData['branch_id'] = $data['branch_id'];
+                            }
+                            if (array_key_exists('department_id', $data)) {
+                                $updateData['department_id'] = $data['department_id'];
+                            }
+                            if (array_key_exists('group', $data)) {
+                                $updateData['group'] = $data['group'];
+                            }
+                            
+                            if (!empty($updateData)) {
+                                foreach ($records as $record) {
+                                    $record->update($updateData);
+                                }
+                                \Filament\Notifications\Notification::make()
+                                    ->title('Success')
+                                    ->body('Category assigned to selected users.')
                                     ->success()
                                     ->send();
                             }
