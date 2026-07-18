@@ -23,6 +23,20 @@ class InitializeTenancyForLivewire
                         if ($tenant) {
                             tenancy()->initialize($tenant);
                             \Illuminate\Support\Facades\URL::defaults(['tenant' => $tenant->shortname ?? $tenant->id]);
+                            
+                            // Ensure essential storage directories exist for this tenant
+                            $directories = [
+                                storage_path('framework/cache'),
+                                storage_path('framework/views'),
+                                storage_path('framework/sessions'),
+                                storage_path('app/livewire-tmp'),
+                                storage_path('app/public'),
+                            ];
+                            foreach ($directories as $dir) {
+                                if (!is_dir($dir)) {
+                                    @mkdir($dir, 0755, true);
+                                }
+                            }
                         }
                     }
                 }
