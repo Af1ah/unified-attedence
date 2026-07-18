@@ -93,13 +93,20 @@ class Reports extends Page implements HasTable
                     Section::make('Filters')->schema([
                         Select::make('filters.branch_id')
                             ->label('Filter Branch')
-                            ->options(Branch::pluck('name', 'id'))
+                            ->options(Branch::all()->pluck('display_name', 'id'))
                             ->multiple()
                             ->searchable()
+                            ->live()
                             ->placeholder('All Branches'),
                         Select::make('filters.department_id')
                             ->label('Filter Department')
-                            ->options(Department::pluck('name', 'id'))
+                            ->options(function (Get $get) {
+                                $branchIds = $get('filters.branch_id');
+                                if (empty($branchIds)) {
+                                    return Department::pluck('name', 'id');
+                                }
+                                return Department::whereHas('branches', fn ($q) => $q->whereIn('branches.id', $branchIds))->pluck('name', 'id');
+                            })
                             ->multiple()
                             ->searchable()
                             ->placeholder('All Departments'),

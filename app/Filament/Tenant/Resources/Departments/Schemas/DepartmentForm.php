@@ -15,8 +15,10 @@ class DepartmentForm
 
                 TextInput::make('name')
                     ->required(),
-                Select::make('branch_id')
-                    ->relationship('branch', 'name')
+                Select::make('branches')
+                    ->relationship('branches', 'name')
+                    ->getOptionLabelFromRecordUsing(fn ($record) => $record->display_name)
+                    ->multiple()
                     ->searchable()
                     ->preload(),
             ]);

@@ -27,11 +27,16 @@ class Branch extends Model
 
     public function departments()
     {
-        return $this->hasMany(Department::class);
+        return $this->belongsToMany(Department::class);
     }
 
     public function devices()
     {
         return $this->hasMany(Device::class);
+    }
+
+    public function getDisplayNameAttribute()
+    {
+        return $this->name . ($this->location ? ' - ' . $this->location : '');
     }
 }

@@ -22,8 +22,8 @@ class Department extends Model
         return $this->hasMany(User::class);
     }
 
-    public function branch()
+    public function branches()
     {
-        return $this->belongsTo(Branch::class);
+        return $this->belongsToMany(Branch::class);
     }
 }

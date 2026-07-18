@@ -88,22 +88,114 @@ class UserResource extends Resource
                 ->schema([
                     Select::make('branch_id')
                         ->relationship('branch', 'name')
+                        ->getOptionLabelFromRecordUsing(fn ($record) => $record->display_name)
                         ->label('Branch')
+                        ->default(fn () => \App\Models\Branch::count() === 1 ? \App\Models\Branch::first()->id : null)
+                        ->live()
                         ->nullable(),
                     Select::make('department_id')
-                        ->relationship('department', 'name')
+                        ->relationship('department', 'name', fn ($query, $get) => 
+                            $get('branch_id') 
+                                ? $query->whereHas('branches', fn ($q) => $q->where('branches.id', $get('branch_id')))
+                                : $query
+                        )
                         ->label('Department')
+                        ->default(fn () => \App\Models\Department::count() === 1 ? \App\Models\Department::first()->id : null)
                         ->nullable(),
-                    TextInput::make('group')
+                    Select::make('group')
                         ->label('Designation / Group')
-                        ->datalist(fn () => \App\Models\User::whereNotNull('group')->where('group', '!=', '')->distinct()->pluck('group')->toArray())
-                        ->autocomplete('off')
+                        ->options(\App\Models\User::whereNotNull('group')->where('group', '!=', '')->distinct()->pluck('group', 'group'))
+                        ->searchable()
+                        ->createOptionForm([
+                            \Filament\Forms\Components\TextInput::make('name')->required()->label('Name'),
+                        ])
+                        ->createOptionUsing(fn (array $data) => $data['name'])
+                        ->nullable(),
+                    Select::make('taskGroups')
+                        ->relationship('taskGroups', 'name')
+                        ->label('Task Groups')
+                        ->multiple()
+                        ->searchable()
+                        ->default(fn () => \App\Models\TaskGroup::count() === 1 ? [\App\Models\TaskGroup::first()->id] : [])
+                        ->createOptionForm([
+                            \Filament\Forms\Components\TextInput::make('name')->required(),
+                            \Filament\Forms\Components\Textarea::make('description'),
+                        ])
                         ->nullable(),
                 ])
                 ->columns(3)
                 ->columnSpanFull()
                 ->collapsed(),
         ]);
+    }
+
+    public static function infolist(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
+    {
+        return $schema
+            ->components([
+                \Filament\Schemas\Components\Group::make([
+                    \Filament\Schemas\Components\Section::make('User Details')
+                        ->schema([
+                            \Filament\Infolists\Components\TextEntry::make('name')
+                                ->label('Name')
+                                ->weight('bold')
+                                ->size('lg'),
+                            \Filament\Infolists\Components\TextEntry::make('pin')
+                                ->label('PIN'),
+                            \Filament\Infolists\Components\TextEntry::make('branch.name')
+                                ->label('Branch')
+                                ->default('Not Assigned'),
+                            \Filament\Infolists\Components\TextEntry::make('department.name')
+                                ->label('Department')
+                                ->default('Not Assigned'),
+                            \Filament\Infolists\Components\TextEntry::make('group')
+                                ->label('Designation / Group')
+                                ->default('Not Assigned'),
+                            \Filament\Infolists\Components\TextEntry::make('fingerprints')
+                                ->label('Added Fingerprints')
+                                ->badge()
+                                ->formatStateUsing(function ($state) {
+                                    if (empty($state) || !is_array($state)) return 'None';
+                                    $fingers = [
+                                        0 => 'Left Pinky', 1 => 'Left Ring', 2 => 'Left Middle', 3 => 'Left Index', 4 => 'Left Thumb',
+                                        5 => 'Right Thumb', 6 => 'Right Index', 7 => 'Right Middle', 8 => 'Right Ring', 9 => 'Right Pinky'
+                                    ];
+                                    $added = [];
+                                    foreach ($state as $fp) {
+                                        $id = $fp['finger_id'] ?? $fp['fid'] ?? null;
+                                        if ($id !== null && isset($fingers[$id])) {
+                                            $added[] = $fingers[$id];
+                                        } elseif ($id !== null) {
+                                            $added[] = 'Finger ' . $id;
+                                        }
+                                    }
+                                    return count($added) > 0 ? implode(', ', $added) : count($state) . ' Template(s)';
+                                })
+                                ->color('success'),
+                        ])->columns(3),
+
+                    \Filament\Schemas\Components\Section::make('Shift Details')
+                        ->schema([
+                            \Filament\Infolists\Components\TextEntry::make('shift')
+                                ->label('Active Shift')
+                                ->formatStateUsing(function ($record) {
+                                    $schedule = $record->getActiveSchedule();
+                                    if (!$schedule) return 'No Active Schedule';
+                                    $rules = $schedule->rules;
+                                    $time = ($rules['start_time'] ?? '--:--') . ' to ' . ($rules['end_time'] ?? '--:--');
+                                    return $schedule->name . ' (' . $time . ')';
+                                }),
+                        ]),
+                ])->columnSpanFull(),
+
+                \Filament\Schemas\Components\Section::make('Attendance Calendar')
+                    ->schema([
+                        \Filament\Infolists\Components\ViewEntry::make('calendar')
+                            ->hiddenLabel()
+                            ->view('filament.tenant.components.attendance-calendar')
+                            ->columnSpanFull(),
+                    ])->columnSpanFull(),
+            ]);
     }
 
     public static function table(Table $table): Table
@@ -149,6 +241,7 @@ class UserResource extends Resource
                     ->default(0),
                 Tables\Filters\SelectFilter::make('branch_id')
                     ->relationship('branch', 'name')
+                    ->getOptionLabelFromRecordUsing(fn ($record) => $record->display_name)
                     ->label('Branch'),
                 Tables\Filters\SelectFilter::make('department_id')
                     ->relationship('department', 'name')
@@ -160,6 +253,7 @@ class UserResource extends Resource
                     ->default(true),
             ])
             ->recordActions([
+                ViewAction::make(),
                 EditAction::make(),
             ])
             ->bulkActions([
@@ -225,25 +319,55 @@ class UserResource extends Resource
                         ->form([
                             \Filament\Forms\Components\Select::make('branch_id')
                                 ->label('Branch')
-                                ->options(\App\Models\Branch::pluck('name', 'id'))
+                                ->options(\App\Models\Branch::all()->pluck('display_name', 'id'))
+                                ->default(fn () => \App\Models\Branch::count() === 1 ? \App\Models\Branch::first()->id : null)
+                                ->live()
                                 ->nullable(),
                             \Filament\Forms\Components\Select::make('department_id')
                                 ->label('Department')
-                                ->options(\App\Models\Department::pluck('name', 'id'))
+                                ->options(function ($get) {
+                                    $branchId = $get('branch_id');
+                                    if (!$branchId) {
+                                        return \App\Models\Department::pluck('name', 'id');
+                                    }
+                                    return \App\Models\Department::whereHas('branches', fn ($q) => $q->where('branches.id', $branchId))->pluck('name', 'id');
+                                })
+                                ->default(fn () => \App\Models\Department::count() === 1 ? \App\Models\Department::first()->id : null)
                                 ->nullable(),
-                            \Filament\Forms\Components\TextInput::make('group')
-                                ->label('Group')
+                            \Filament\Forms\Components\Select::make('group')
+                                ->label('Designation / Group')
+                                ->options(\App\Models\User::whereNotNull('group')->where('group', '!=', '')->distinct()->pluck('group', 'group'))
+                                ->searchable()
+                                ->createOptionForm([
+                                    \Filament\Forms\Components\TextInput::make('name')->required()->label('Name'),
+                                ])
+                                ->createOptionUsing(fn (array $data) => $data['name'])
+                                ->nullable(),
+                            \Filament\Forms\Components\Select::make('taskGroups')
+                                ->label('Task Groups')
+                                ->multiple()
+                                ->options(\App\Models\TaskGroup::pluck('name', 'id'))
+                                ->searchable()
+                                ->default(fn () => \App\Models\TaskGroup::count() === 1 ? [\App\Models\TaskGroup::first()->id] : [])
+                                ->createOptionForm([
+                                    \Filament\Forms\Components\TextInput::make('name')->required(),
+                                    \Filament\Forms\Components\Textarea::make('description'),
+                                ])
+                                ->createOptionUsing(function (array $data) {
+                                    $taskGroup = \App\Models\TaskGroup::create($data);
+                                    return $taskGroup->id;
+                                })
                                 ->nullable(),
                         ])
                         ->action(function (\Illuminate\Database\Eloquent\Collection $records, array $data) {
                             $updateData = [];
-                            if (array_key_exists('branch_id', $data)) {
+                            if (array_key_exists('branch_id', $data) && $data['branch_id'] !== null) {
                                 $updateData['branch_id'] = $data['branch_id'];
                             }
-                            if (array_key_exists('department_id', $data)) {
+                            if (array_key_exists('department_id', $data) && $data['department_id'] !== null) {
                                 $updateData['department_id'] = $data['department_id'];
                             }
-                            if (array_key_exists('group', $data)) {
+                            if (array_key_exists('group', $data) && $data['group'] !== null) {
                                 $updateData['group'] = $data['group'];
                             }
                             
@@ -251,12 +375,19 @@ class UserResource extends Resource
                                 foreach ($records as $record) {
                                     $record->update($updateData);
                                 }
-                                \Filament\Notifications\Notification::make()
-                                    ->title('Success')
-                                    ->body('Category assigned to selected users.')
-                                    ->success()
-                                    ->send();
                             }
+
+                            if (!empty($data['taskGroups'])) {
+                                foreach ($records as $record) {
+                                    $record->taskGroups()->syncWithoutDetaching($data['taskGroups']);
+                                }
+                            }
+                            
+                            \Filament\Notifications\Notification::make()
+                                ->title('Success')
+                                ->body('Categories assigned to selected users.')
+                                ->success()
+                                ->send();
                         })
                         ->deselectRecordsAfterCompletion(),
                 ]),

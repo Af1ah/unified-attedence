@@ -17,6 +17,9 @@ class DepartmentsTable
 
                 TextColumn::make('name')
                     ->searchable(),
+                TextColumn::make('branches.name')
+                    ->label('Branches')
+                    ->badge(),
                 TextColumn::make('users_count')
                     ->counts('users')
                     ->label('Users'),
