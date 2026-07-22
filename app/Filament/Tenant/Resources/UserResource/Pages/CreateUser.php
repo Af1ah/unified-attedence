@@ -25,4 +25,16 @@ class CreateUser extends CreateRecord
 
         return $data;
     }
+
+    protected function afterCreate(): void
+    {
+        if (!empty($this->record->whatsapp_number)) {
+            $message = "Welcome {$this->record->name}! Your profile has been created in the attendance system. Your PIN is {$this->record->pin}.";
+            try {
+                app(\App\Services\WhatsAppService::class)->sendMessage($this->record->whatsapp_number, $message);
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error('WhatsApp notification failed: ' . $e->getMessage());
+            }
+        }
+    }
 }

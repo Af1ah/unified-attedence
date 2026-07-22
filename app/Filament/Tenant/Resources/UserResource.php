@@ -63,6 +63,11 @@ class UserResource extends Resource
                         ->unique(ignoreRecord: true)
                         ->nullable()
                         ->autocomplete('off'),
+                    TextInput::make('whatsapp_number')
+                        ->label('WhatsApp Number')
+                        ->hint('Include country code without +, e.g., 919876543210')
+                        ->tel()
+                        ->nullable(),
                     TextInput::make('card_number')
                         ->label('Card Number')
                         ->autocomplete('off'),
@@ -142,6 +147,9 @@ class UserResource extends Resource
                                 ->size('lg'),
                             \Filament\Infolists\Components\TextEntry::make('pin')
                                 ->label('PIN'),
+                            \Filament\Infolists\Components\TextEntry::make('whatsapp_number')
+                                ->label('WhatsApp Number')
+                                ->default('Not Provided'),
                             \Filament\Infolists\Components\TextEntry::make('branch.name')
                                 ->label('Branch')
                                 ->default('Not Assigned'),
@@ -209,6 +217,10 @@ class UserResource extends Resource
                     ->searchable(),
                 Tables\Columns\TextColumn::make('card_number')
                     ->label('Card')
+                    ->toggleable(isToggledHiddenByDefault: true),
+                Tables\Columns\TextColumn::make('whatsapp_number')
+                    ->label('WhatsApp Number')
+                    ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('branch.name')
                     ->label('Branch')

@@ -29,4 +29,16 @@ class EditUser extends EditRecord
             Actions\DeleteAction::make(),
         ];
     }
+
+    protected function afterSave(): void
+    {
+        if (!empty($this->record->whatsapp_number) && $this->record->wasChanged()) {
+            $message = "Hello {$this->record->name}, your profile has been updated in the attendance system.";
+            try {
+                app(\App\Services\WhatsAppService::class)->sendMessage($this->record->whatsapp_number, $message);
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error('WhatsApp notification failed: ' . $e->getMessage());
+            }
+        }
+    }
 }

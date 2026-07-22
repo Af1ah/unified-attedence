@@ -24,6 +24,28 @@ class AttendanceLog extends Model
 {
     protected $guarded = [];
 
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::created(function ($log) {
+            $user = $log->user;
+            if ($user && !empty($user->whatsapp_number)) {
+                $status = $log->status_label;
+                $time = $log->punched_at->format('Y-m-d H:i:s');
+                $message = "Hello {$user->name}, your attendance punch ({$status}) at {$time} has been recorded.";
+                
+                // Dispatch to a background job or handle immediately?
+                // For now, handle it immediately or use a lightweight background task.
+                try {
+                    app(\App\Services\WhatsAppService::class)->sendMessage($user->whatsapp_number, $message);
+                } catch (\Exception $e) {
+                    \Illuminate\Support\Facades\Log::error('WhatsApp notification failed: ' . $e->getMessage());
+                }
+            }
+        });
+    }
+
     protected $casts = [
         'punched_at' => 'datetime',
         'raw_data' => 'array',
