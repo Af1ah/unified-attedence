@@ -89,6 +89,7 @@ class DeviceResource extends Resource
                     ->label('IP Address'),
                 Tables\Columns\TextColumn::make('status')
                     ->badge()
+                    ->getStateUsing(fn (Device $record): string => $record->isOnline() ? 'online' : 'offline')
                     ->color(fn (string $state): string => match ($state) {
                         'online' => 'success',
                         'offline' => 'danger',
@@ -134,20 +135,27 @@ class DeviceResource extends Resource
                     ->modalHeading('Clear Device Logs')
                     ->modalDescription('Are you sure you want to clear all attendance logs on this device?')
                     ->action(fn (Device $record) => app(DeviceCommandBuilder::class)->clearAttendanceLogs($record)),
-                Action::make('sync_users')
-                    ->label('Sync Users')
-                    ->icon('heroicon-o-users')
-                    ->color('success')
+                Action::make('checkConnection')
+                    ->label('Check ADMS Connection')
+                    ->icon('heroicon-o-wifi')
+                    ->color('info')
                     ->requiresConfirmation()
-                    ->modalHeading('Sync Users via ZKLib')
-                    ->modalDescription('Are you sure you want to connect directly to the device via port 4370 to fetch all users, active fingerprints, and RFID cards?')
+                    ->modalHeading('Check Connection')
+                    ->modalDescription('This will queue a CHECK command. The device should process it on its next poll.')
                     ->action(function (Device $record) {
-                        $result = app(\App\Services\Attendance\DirectDeviceService::class)->syncUsersFromDevice($record);
-                        if ($result['status']) {
-                            \Filament\Notifications\Notification::make()->title('Success')->body($result['message'])->success()->send();
-                        } else {
-                            \Filament\Notifications\Notification::make()->title('Failed')->body($result['message'])->danger()->send();
-                        }
+                        app(DeviceCommandBuilder::class)->checkConnection($record);
+                        \Filament\Notifications\Notification::make()->title('Command Queued')->body('Check connection command queued successfully.')->success()->send();
+                    }),
+                Action::make('syncTime')
+                    ->label('Sync Time')
+                    ->icon('heroicon-o-clock')
+                    ->color('primary')
+                    ->requiresConfirmation()
+                    ->modalHeading('Sync Device Time')
+                    ->modalDescription('Queue a command to sync the device time with the server time.')
+                    ->action(function (Device $record) {
+                        app(DeviceCommandBuilder::class)->syncTime($record);
+                        \Filament\Notifications\Notification::make()->title('Command Queued')->body('Time sync command queued successfully.')->success()->send();
                     }),
             ])
             ->toolbarActions([

@@ -162,22 +162,23 @@ class UserResource extends Resource
                             \Filament\Infolists\Components\TextEntry::make('fingerprints')
                                 ->label('Added Fingerprints')
                                 ->badge()
-                                ->formatStateUsing(function ($state) {
-                                    if (empty($state) || !is_array($state)) return 'None';
+                                ->formatStateUsing(function ($state, $record) {
+                                    $rawState = $record->fingerprints;
+                                    if (empty($rawState) || !is_array($rawState)) return 'None';
                                     $fingers = [
                                         0 => 'Left Pinky', 1 => 'Left Ring', 2 => 'Left Middle', 3 => 'Left Index', 4 => 'Left Thumb',
                                         5 => 'Right Thumb', 6 => 'Right Index', 7 => 'Right Middle', 8 => 'Right Ring', 9 => 'Right Pinky'
                                     ];
                                     $added = [];
-                                    foreach ($state as $fp) {
-                                        $id = $fp['finger_id'] ?? $fp['fid'] ?? null;
+                                    foreach ($rawState as $key => $fp) {
+                                        $id = is_numeric($key) ? (int)$key : ($fp['finger_id'] ?? $fp['fid'] ?? null);
                                         if ($id !== null && isset($fingers[$id])) {
                                             $added[] = $fingers[$id];
                                         } elseif ($id !== null) {
                                             $added[] = 'Finger ' . $id;
                                         }
                                     }
-                                    return count($added) > 0 ? implode(', ', $added) : count($state) . ' Template(s)';
+                                    return count($added) > 0 ? implode(', ', $added) : count($rawState) . ' Template(s)';
                                 })
                                 ->color('success'),
                         ])->columns(3),
@@ -276,25 +277,67 @@ class UserResource extends Resource
                         ->color('success')
                         ->label('Push to Device')
                         ->form([
-                            \Filament\Forms\Components\Select::make('device_id')
-                                ->label('Select Device')
+                            \Filament\Forms\Components\Select::make('device_ids')
+                                ->label('Select Devices to Sync To')
+                                ->multiple()
                                 ->options(\App\Models\Device::all()->mapWithKeys(fn($d) => [$d->id => $d->name ?: $d->serial_number])->toArray())
-                                ->default(fn() => \App\Models\Device::count() === 1 ? \App\Models\Device::first()->id : null)
-                                ->hidden(fn() => \App\Models\Device::count() <= 1)
+                                ->default(fn() => \App\Models\Device::count() === 1 ? [\App\Models\Device::first()->id] : [])
                                 ->required(),
+                            \Filament\Forms\Components\CheckboxList::make('sync_properties')
+                                ->label('What to sync?')
+                                ->options([
+                                    'profile' => 'Basic Profile (Name, Card, Privilege, Password)',
+                                    'biometrics' => 'Biometrics (Fingerprints)',
+                                ])
+                                ->default(['profile', 'biometrics'])
+                                ->required()
+                                ->columns(1),
                         ])
                         ->action(function (\Illuminate\Database\Eloquent\Collection $records, array $data) {
-                            $deviceId = $data['device_id'] ?? \App\Models\Device::first()?->id;
-                            $device = \App\Models\Device::find($deviceId);
+                            $deviceIds = $data['device_ids'] ?? [];
+                            if (empty($deviceIds) && \App\Models\Device::count() === 1) {
+                                $deviceIds = [\App\Models\Device::first()->id];
+                            }
                             
-                            if ($device) {
-                                $result = app(\App\Services\Attendance\DirectDeviceService::class)->pushUsersToDevice($device, $records);
-                                if ($result['status']) {
-                                    \Filament\Notifications\Notification::make()->title('Success')->body($result['message'])->success()->send();
-                                } else {
-                                    \Filament\Notifications\Notification::make()->title('Failed')->body($result['message'])->danger()->send();
+                            $syncProfile = in_array('profile', $data['sync_properties']);
+                            $syncBio = in_array('biometrics', $data['sync_properties']);
+                            
+                            $devices = \App\Models\Device::whereIn('id', $deviceIds)->get();
+                            $builder = app(\App\Services\Attendance\DeviceCommandBuilder::class);
+                            
+                            foreach ($devices as $device) {
+                                foreach ($records as $user) {
+                                    if ($syncProfile) {
+                                        $builder->addUser($device, [
+                                            'pin' => $user->pin,
+                                            'name' => $user->name,
+                                            'card' => $user->card_number,
+                                            'privilege' => $user->privilege,
+                                            'password' => $user->device_password,
+                                            'group' => $user->group ?? 1,
+                                        ]);
+                                    }
+                                    
+                                    if ($syncBio) {
+                                        $fingerprints = $user->fingerprints;
+                                        if (is_array($fingerprints)) {
+                                            foreach ($fingerprints as $key => $fp) {
+                                                $id = is_numeric($key) ? (int)$key : ($fp['finger_id'] ?? $fp['fid'] ?? null);
+                                                if ($id !== null && isset($fp['tmp'])) {
+                                                    $builder->addFingerprint($device, $user->pin, $id, $fp['tmp']);
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
+                            
+                            $deviceCount = $devices->count();
+                            \Filament\Notifications\Notification::make()
+                                ->title('Commands Queued')
+                                ->body("{$records->count()} user(s) synced across {$deviceCount} device(s) for the next ADMS poll.")
+                                ->success()
+                                ->send();
                         })
                         ->deselectRecordsAfterCompletion(),
                     \Filament\Actions\BulkAction::make('deleteFromDevice')

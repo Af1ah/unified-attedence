@@ -170,4 +170,88 @@ class DirectDeviceService
             return ['status' => false, 'message' => "Error while pushing: " . $e->getMessage()];
         }
     }
+
+    /**
+     * Test local network connection to a ZKTeco device.
+     *
+     * @param Device $device
+     * @return array
+     */
+    public function testConnection(Device $device): array
+    {
+        if (empty($device->ip_address)) {
+            return ['status' => false, 'message' => 'Device has no IP address configured. Please edit the device and set its local IP.'];
+        }
+
+        $zk = new ZKTeco($device->ip_address, 4370);
+        
+        if (!$zk->connect()) {
+            return ['status' => false, 'message' => "Could not connect to device at {$device->ip_address}:4370."];
+        }
+
+        $deviceName = $zk->deviceName();
+        $zk->disconnect();
+
+        return ['status' => true, 'message' => "Successfully connected to device. Device Name: {$deviceName}"];
+    }
+
+    /**
+     * Sync attendance logs from a local ZKTeco device.
+     *
+     * @param Device $device
+     * @return array
+     */
+    public function syncAttendanceLogs(Device $device): array
+    {
+        if (empty($device->ip_address)) {
+            return ['status' => false, 'message' => 'Device has no IP address configured. Please edit the device and set its local IP.'];
+        }
+
+        $zk = new ZKTeco($device->ip_address, 4370);
+        
+        if (!$zk->connect()) {
+            return ['status' => false, 'message' => "Could not connect to device at {$device->ip_address}:4370."];
+        }
+
+        try {
+            $attendanceLogs = $zk->getAttendance();
+            $zk->disconnect();
+
+            if (!is_array($attendanceLogs) || empty($attendanceLogs)) {
+                return ['status' => true, 'message' => 'No attendance logs found on the device.'];
+            }
+
+            $syncedCount = 0;
+            $userModelClass = config('zkteco-adms.models.user', User::class);
+            $attendanceLogModelClass = config('zkteco-adms.models.attendance_log', \App\Models\AttendanceLog::class);
+
+            foreach ($attendanceLogs as $log) {
+                $pin = (string)$log['id'];
+                $timestamp = $log['timestamp']; 
+                $state = $log['state'] ?? 1; 
+                $type = $log['type'] ?? 1; 
+
+                $user = $userModelClass::where('pin', $pin)->first();
+                
+                if ($user) {
+                    $attendanceLogModelClass::firstOrCreate([
+                        'user_id' => $user->id,
+                        'device_id' => $device->id,
+                        'punch_time' => $timestamp,
+                    ], [
+                        'punch_state' => $state,
+                        'verify_type' => $type,
+                    ]);
+                    $syncedCount++;
+                }
+            }
+
+            return ['status' => true, 'message' => "Successfully synced {$syncedCount} attendance logs."];
+
+        } catch (\Exception $e) {
+            $zk->disconnect();
+            Log::error("Error syncing attendance logs via ZKLib", ['error' => $e->getMessage()]);
+            return ['status' => false, 'message' => "Error while syncing logs: " . $e->getMessage()];
+        }
+    }
 }

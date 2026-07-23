@@ -48,6 +48,14 @@ class DeviceCommandBuilder
         return $this->createCommand($device, 'DATA', $content);
     }
 
+    public function addFingerprint(Device $device, string $pin, int $fid, string $template): DeviceCommand
+    {
+        $size = strlen($template);
+        $content = "DATA FINGERTMP PIN={$pin}\tFID={$fid}\tSize={$size}\tValid=1\tTMP={$template}";
+        
+        return $this->createCommand($device, 'DATA', $content);
+    }
+
     public function deleteUser(Device $device, string $pin): DeviceCommand
     {
         return $this->createCommand($device, 'DATA', "DATA DEL_USER PIN={$pin}");
@@ -56,6 +64,25 @@ class DeviceCommandBuilder
     public function queryUser(Device $device, string $pin): DeviceCommand
     {
         return $this->createCommand($device, 'DATA', "DATA QUERY USERINFO PIN={$pin}");
+    }
+
+    public function queryAllUsers(Device $device): DeviceCommand
+    {
+        return $this->createCommand($device, 'DATA', "DATA QUERY USERINFO");
+    }
+
+    public function queryAllFingerprints(Device $device): DeviceCommand
+    {
+        return $this->createCommand($device, 'DATA', "DATA QUERY FINGERTMP");
+    }
+
+    public function queryAttendanceLogs(Device $device, string $startTime = null, string $endTime = null): DeviceCommand
+    {
+        $content = "DATA QUERY ATTLOG";
+        if ($startTime && $endTime) {
+            $content .= " StartTime={$startTime}\tEndTime={$endTime}";
+        }
+        return $this->createCommand($device, 'DATA', $content);
     }
 
     public function checkConnection(Device $device): DeviceCommand

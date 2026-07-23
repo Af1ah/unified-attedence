@@ -94,19 +94,23 @@ class ProcessAdmsPayload implements ShouldQueue
                 $status = ($lastLog && $lastLog->status === 0) ? 1 : 0;
             }
 
-            $record = $modelClass::create([
-                'device_id' => $device->id,
-                'pin' => $log['pin'],
-                'punched_at' => $log['punched_at'],
-                'status' => $status,
-                'verify_type' => $log['verify_type'],
-                'work_code' => $log['work_code'],
-                'reserved_1' => $log['reserved_1'],
-                'reserved_2' => $log['reserved_2'],
-                'raw_data' => ['raw' => $log['raw']],
-            ]);
+            $record = $modelClass::firstOrCreate(
+                [
+                    'pin' => $log['pin'],
+                    'punched_at' => $log['punched_at'],
+                ],
+                [
+                    'device_id' => $device->id,
+                    'status' => $status,
+                    'verify_type' => $log['verify_type'],
+                    'work_code' => $log['work_code'],
+                    'reserved_1' => $log['reserved_1'],
+                    'reserved_2' => $log['reserved_2'],
+                    'raw_data' => ['raw' => $log['raw']],
+                ]
+            );
 
-            if (config('zkteco-adms.events.dispatch_attendance_received', true)) {
+            if ($record->wasRecentlyCreated && config('zkteco-adms.events.dispatch_attendance_received', true)) {
                 event(new AttendanceReceived($record, $device));
             }
         }

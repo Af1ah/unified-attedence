@@ -74,6 +74,8 @@ Ensure Nginx/Apache has permission to read and write to the storage folders, and
 php artisan storage:link
 sudo chown -R www-data:www-data storage bootstrap/cache
 ```
+php artisan queue:work
+php artisan serve --host=0.0.0.0 --port=8000
 
 ## Configuring the Attendance Devices
 

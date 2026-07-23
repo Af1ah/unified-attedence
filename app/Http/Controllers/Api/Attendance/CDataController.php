@@ -72,11 +72,6 @@ class CDataController extends Controller
         $body = $request->getContent();
         $stamp = $request->query('Stamp');
         
-        \Illuminate\Support\Facades\Log::info("ADMS Data Received (Queued)", [
-            'device' => $device->serial_number,
-            'table' => $table,
-            'stamp' => $stamp,
-        ]);
 
         $tenantId = null;
         if (function_exists('tenant') && tenant('id')) {
