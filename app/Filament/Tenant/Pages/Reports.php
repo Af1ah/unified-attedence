@@ -7,166 +7,158 @@ use App\Models\Branch;
 use App\Models\Department;
 use App\Models\Schedule;
 use App\Models\User;
+use App\Services\Attendance\ReportService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Checkbox;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Toggle;
+use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Forms\Contracts\HasForms;
+use Filament\Forms\Form;
 use Filament\Pages\Page;
-use Filament\Actions\EditAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
-use Filament\Schemas\Components\Grid;
-use Filament\Schemas\Components\Section;
-use Filament\Schemas\Components\Group;
-use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\Toggle;
-use Filament\Schemas\Components\Utilities\Get;
+use Filament\Actions\EditAction;
+use Carbon\Carbon;
 
-class Reports extends Page implements HasTable
+class Reports extends Page implements HasTable, HasForms
 {
-    use InteractsWithTable;
+    use InteractsWithTable, InteractsWithForms;
 
     protected static string | \BackedEnum | null $navigationIcon = 'heroicon-o-chart-bar';
 
     protected string $view = 'filament.tenant.pages.reports';
 
-    protected function getReportFormSchema(): array
+    public $activeTab = 'daily';
+    public $reportData = null;
+
+    public ?array $filterData = [];
+
+    public function mount()
     {
-        return [
-            Grid::make(3)->schema([
-                Group::make()->schema([
-                    Section::make('Configuration')->schema([
-                        TextInput::make('name')
-                            ->label('Template Name')
-                            ->required()
-                            ->columnSpanFull(),
-                        Select::make('type')
-                            ->label('Report Type')
-                            ->options([
-                                'regular' => 'Regular Report',
-                                'summary' => 'Summary Report',
-                                'absent' => 'Absent Report',
-                                'work_hours' => 'Work Hours Report',
-                            ])
-                            ->default('regular')
-                            ->required()
-                            ->columnSpanFull(),
-                        Select::make('group_by')
-                            ->label('Group By')
-                            ->options([
-                                'branch' => 'Branch Wise',
-                                'department' => 'Department Wise',
-                                'work_group' => 'Work Group Wise',
-                            ])
-                            ->placeholder('None')
-                            ->columnSpanFull(),
-                    ]),
-                    
-                    Section::make('Date Range')->schema([
-                        Select::make('date_range')
-                            ->label('Period')
-                            ->options([
-                                'daily' => 'Daily',
-                                'weekly' => 'Weekly',
-                                'monthly' => 'Monthly',
-                                'custom' => 'Custom',
-                            ])
-                            ->default('daily')
-                            ->required()
-                            ->live(),
-                        Grid::make(2)->schema([
-                            DatePicker::make('filters.from_date')
-                                ->label('From Date')
-                                ->required(fn (Get $get) => $get('date_range') === 'custom')
-                                ->visible(fn (Get $get) => $get('date_range') === 'custom'),
-                            DatePicker::make('filters.to_date')
-                                ->label('To Date')
-                                ->required(fn (Get $get) => $get('date_range') === 'custom')
-                                ->visible(fn (Get $get) => $get('date_range') === 'custom'),
-                        ]),
-                    ]),
-                ])->columnSpan(['sm' => 3, 'md' => 1]),
-
-                Group::make()->schema([
-                    Section::make('Filters')->schema([
-                        Select::make('filters.branch_id')
-                            ->label('Filter Branch')
-                            ->options(Branch::all()->pluck('display_name', 'id'))
-                            ->multiple()
-                            ->searchable()
-                            ->live()
-                            ->placeholder('All Branches'),
-                        Select::make('filters.department_id')
-                            ->label('Filter Department')
-                            ->options(function (Get $get) {
-                                $branchIds = $get('filters.branch_id');
-                                if (empty($branchIds)) {
-                                    return Department::pluck('name', 'id');
-                                }
-                                return Department::whereHas('branches', fn ($q) => $q->whereIn('branches.id', $branchIds))->pluck('name', 'id');
-                            })
-                            ->multiple()
-                            ->searchable()
-                            ->placeholder('All Departments'),
-                        Select::make('filters.schedule_id')
-                            ->label('Filter Shifts and schedules')
-                            ->options(Schedule::pluck('name', 'id'))
-                            ->multiple()
-                            ->searchable()
-                            ->placeholder('All Shifts and schedules'),
-                        Select::make('user_ids')
-                            ->label('Filter Employee')
-                            ->options(User::select('id', 'name', 'pin')->get()->mapWithKeys(fn($user) => [$user->id => $user->name . ' (ID: ' . ($user->pin ?? $user->id) . ')']))
-                            ->multiple()
-                            ->searchable()
-                            ->placeholder('All Employees'),
-                        Select::make('filters.group')
-                            ->label('Filter Designation / Group')
-                            ->options(fn () => User::whereNotNull('group')->where('group', '!=', '')->distinct()->pluck('group', 'group')->toArray())
-                            ->multiple()
-                            ->searchable()
-                            ->placeholder('All Designations'),
-                    ])->columns(2),
-
-                    Section::make('Settings')->schema([
-                        Grid::make(2)->schema([
-                            Toggle::make('is_template')
-                                ->label('Save as Template')
-                                ->default(true),
-                            Toggle::make('filters.show_logo')
-                                ->label('Show Company Logo')
-                                ->default(true),
-                        ]),
-                    ]),
-                ])->columnSpan(['sm' => 3, 'md' => 2]),
-            ])
-        ];
+        $this->form->fill([
+            'branch_id' => [],
+            'department_id' => [],
+            'user_ids' => [],
+            'from_date' => now()->format('Y-m-d'),
+            'to_date' => now()->format('Y-m-d'),
+        ]);
+        
+        $this->generate();
     }
 
-    protected function getHeaderActions(): array
+    public function form($form)
     {
-        return [
-            Action::make('create')
-                ->label('Create')
-                ->icon('heroicon-o-plus')
-                ->modalHeading('Create Report')
-                ->modalWidth('6xl')
-                ->form($this->getReportFormSchema())
-                ->action(function (array $data) {
-                    Report::create([
-                        'name' => $data['name'],
-                        'date_range' => $data['date_range'],
-                        'group_by' => $data['group_by'] ?? null,
-                        'filters' => $data['filters'] ?? [],
-                        'type' => $data['type'],
-                        'user_ids' => $data['user_ids'] ?? [],
-                        'is_template' => $data['is_template'],
-                        'status' => 'pending',
-                    ]);
-                }),
-        ];
+        return $form
+            ->schema([
+                Select::make('branch_id')
+                    ->label('Branch')
+                    ->options(Branch::all()->pluck('display_name', 'id'))
+                    ->multiple()->searchable(),
+                Select::make('department_id')
+                    ->label('Department')
+                    ->options(Department::pluck('name', 'id'))
+                    ->multiple()->searchable(),
+                Select::make('user_ids')
+                    ->label('Employees')
+                    ->options(User::pluck('name', 'id'))
+                    ->multiple()->searchable(),
+                DatePicker::make('from_date')->label('From Date')->required(),
+                DatePicker::make('to_date')->label('To Date')->required(),
+            ])
+            ->columns(5)
+            ->statePath('filterData');
+    }
+
+    public function updatedActiveTab()
+    {
+        if ($this->activeTab === 'daily') {
+            $this->filterData['from_date'] = now()->format('Y-m-d');
+            $this->filterData['to_date'] = now()->format('Y-m-d');
+        } elseif ($this->activeTab === 'weekly') {
+            $this->filterData['from_date'] = now()->startOfWeek()->format('Y-m-d');
+            $this->filterData['to_date'] = now()->endOfWeek()->format('Y-m-d');
+        } elseif ($this->activeTab === 'monthly') {
+            $this->filterData['from_date'] = now()->startOfMonth()->format('Y-m-d');
+            $this->filterData['to_date'] = now()->endOfMonth()->format('Y-m-d');
+        }
+        
+        if ($this->activeTab !== 'templates') {
+            $this->generate();
+        }
+    }
+
+    public function generate()
+    {
+        $data = $this->form->getState();
+        
+        $query = User::query();
+        if (!empty($data['branch_id'])) {
+            $query->whereIn('branch_id', $data['branch_id']);
+        }
+        if (!empty($data['department_id'])) {
+            $query->whereIn('department_id', $data['department_id']);
+        }
+        if (!empty($data['user_ids'])) {
+            $query->whereIn('id', $data['user_ids']);
+        }
+        
+        $userIds = $query->pluck('id')->toArray();
+        
+        if (empty($userIds)) {
+            $this->reportData = null;
+            return;
+        }
+
+        $service = new ReportService();
+        $this->reportData = $service->generateReport(
+            $userIds, 
+            $data['from_date'] ?? now()->format('Y-m-d'), 
+            $data['to_date'] ?? now()->format('Y-m-d')
+        );
+    }
+
+    public function downloadCsv()
+    {
+        $this->generate();
+        if (!$this->reportData) return;
+        
+        $csvData = [];
+        // Header
+        $header = ['Employee'];
+        foreach ($this->reportData['period'] as $date) {
+            $header[] = $date['month_day'];
+        }
+        $header[] = 'Total Hrs';
+        $header[] = 'Present';
+        $header[] = 'Absent';
+        $csvData[] = implode(',', $header);
+        
+        // Rows
+        foreach ($this->reportData['data'] as $row) {
+            $csvRow = ['"' . $row['user_name'] . '"'];
+            foreach ($this->reportData['period'] as $date) {
+                $d = $date['date'];
+                $csvRow[] = $row['daily'][$d]['display'] ?? 'Absent';
+            }
+            $csvRow[] = $row['total_display'];
+            $csvRow[] = $row['present'];
+            $csvRow[] = $row['absent'];
+            $csvData[] = implode(',', $csvRow);
+        }
+        
+        return response()->streamDownload(function() use ($csvData) {
+            echo implode("\n", $csvData);
+        }, $this->activeTab . '_report.csv');
+    }
+
+    public function downloadPdf()
+    {
+        // We will just do a JS print for now, it's easier and looks better than raw DomPDF without styles
+        $this->dispatch('print-report');
     }
 
     public function table(Table $table): Table
@@ -181,18 +173,7 @@ class Reports extends Page implements HasTable
                 TextColumn::make('last_calculated_at')->label('Last Updates')->dateTime(),
             ])
             ->actions([
-                Action::make('recalculate')
-                    ->label('Recalculate')
-                    ->icon('heroicon-o-arrow-path')
-                    ->action(function (Report $record) {
-                        $record->update([
-                            'status' => 'calculating',
-                        ]);
-                    }),
-                EditAction::make()
-                    ->modalWidth('6xl')
-                    ->form($this->getReportFormSchema()),
-                Action::make('view')
+                \Filament\Actions\Action::make('view')
                     ->label('View')
                     ->icon('heroicon-o-eye')
                     ->modalContent(fn (Report $record) => view('filament.tenant.pages.report-view', ['report' => $record]))

@@ -84,7 +84,7 @@ Once your application is live on your domain (e.g. `https://zkteco.ariise.cloud`
 On the device menu, navigate to **Cloud Server Settings** or **ADMS Settings** and enter:
 - **Server Address:** `zkteco.ariise.cloud`
 - **Server Port:** `443` (if using HTTPS) or `80`
-- **Server URL:** `http://zkteco.ariise.cloud/api`
+- **Server URL / Domain:** `http://zkteco.ariise.cloud` (or just `zkteco.ariise.cloud` if the device asks for Server Address)
 
 > [!WARNING]
-> Do **not** forget the `/api` at the end of the Server URL! All of the ADMS endpoints (like `/iclock/cdata`) are correctly registered under Laravel's native `/api` prefix.
+> Do **not** add `/api` to the end of the URL! We recently updated the architecture to handle biometric requests directly on the root domain (e.g., `/iclock/cdata`). If your device firmware asks for a "Server Address", simply enter your domain without `http://` or `/iclock`.
