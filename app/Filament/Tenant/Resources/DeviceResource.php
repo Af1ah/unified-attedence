@@ -37,23 +37,47 @@ class DeviceResource extends Resource
         return $schema->components([
             Section::make('Device Information')
                 ->schema([
+                    Select::make('vendor')
+                        ->options([
+                            'zkteco' => 'ZKTeco (ADMS)',
+                            'hikvision' => 'Hikvision (ISAPI)',
+                        ])
+                        ->default('zkteco')
+                        ->live()
+                        ->afterStateUpdated(fn ($state, callable $set) => $state === 'hikvision' ? $set('serial_number', null) : null),
                     TextInput::make('serial_number')
-                        ->required()
+                        ->required(fn ($get) => $get('vendor') === 'zkteco')
                         ->unique(ignoreRecord: true)
                         ->maxLength(100),
+                    TextInput::make('ip_address')
+                        ->label('IP Address'),
+                    TextInput::make('username')
+                        ->visible(fn ($get) => $get('vendor') === 'hikvision')
+                        ->required(fn ($get) => $get('vendor') === 'hikvision'),
+                    TextInput::make('password')
+                        ->password()
+                        ->visible(fn ($get) => $get('vendor') === 'hikvision')
+                        ->required(fn ($get) => $get('vendor') === 'hikvision'),
+                    TextInput::make('port')
+                        ->numeric()
+                        ->default(80)
+                        ->visible(fn ($get) => $get('vendor') === 'hikvision'),
+                    Select::make('protocol')
+                        ->options(['http' => 'HTTP', 'https' => 'HTTPS'])
+                        ->default('http')
+                        ->visible(fn ($get) => $get('vendor') === 'hikvision'),
                     TextInput::make('name')
                         ->maxLength(255),
                     Select::make('branch_id')
                         ->relationship('branch', 'name')
                         ->searchable()
                         ->preload(),
-                    TextInput::make('ip_address')
-                        ->label('IP Address'),
-                    TextInput::make('model'),
+                    TextInput::make('model')
+                        ->disabled(fn ($get) => $get('vendor') === 'hikvision'),
                     TextInput::make('firmware_version')
                         ->disabled(),
                     TextInput::make('push_version')
-                        ->disabled(),
+                        ->disabled(fn ($get) => $get('vendor') === 'hikvision'),
                     Select::make('status')
                         ->options([
                             'online' => 'Online',
@@ -139,12 +163,68 @@ class DeviceResource extends Resource
                     ->label('Check ADMS Connection')
                     ->icon('heroicon-o-wifi')
                     ->color('info')
+                    ->visible(fn (Device $record) => $record->vendor === 'zkteco' || empty($record->vendor))
                     ->requiresConfirmation()
                     ->modalHeading('Check Connection')
                     ->modalDescription('This will queue a CHECK command. The device should process it on its next poll.')
                     ->action(function (Device $record) {
                         app(DeviceCommandBuilder::class)->checkConnection($record);
                         \Filament\Notifications\Notification::make()->title('Command Queued')->body('Check connection command queued successfully.')->success()->send();
+                    }),
+                Action::make('hikvisionStatus')
+                    ->label('Check ISAPI Status')
+                    ->icon('heroicon-o-signal')
+                    ->color('success')
+                    ->visible(fn (Device $record) => $record->vendor === 'hikvision')
+                    ->action(function (Device $record) {
+                        try {
+                            \Shaykhnazar\HikvisionIsapi\Facades\Hikvision::registerDevice('device_' . $record->id, [
+                                'ip' => $record->ip_address,
+                                'port' => $record->port ?? 80,
+                                'username' => $record->username,
+                                'password' => $record->password,
+                                'protocol' => $record->protocol ?? 'http',
+                                'timeout' => 5,
+                                'verify_ssl' => false,
+                            ]);
+                            $client = \Shaykhnazar\HikvisionIsapi\Facades\Hikvision::device('device_' . $record->id);
+                            $deviceService = new \Shaykhnazar\HikvisionIsapi\Services\DeviceService($client);
+                            
+                            if ($deviceService->isOnline()) {
+                                $info = $deviceService->getInfo();
+                                
+                                // Auto update model/firmware on success
+                                $model = $info['DeviceInfo']['model'] ?? 'Unknown';
+                                $fw = $info['DeviceInfo']['firmwareVersion'] ?? 'Unknown';
+                                
+                                $record->update([
+                                    'status' => 'online',
+                                    'model' => $model,
+                                    'firmware_version' => $fw,
+                                    'last_activity_at' => now(),
+                                ]);
+                                
+                                \Filament\Notifications\Notification::make()
+                                    ->title('Device Online')
+                                    ->body("Model: {$model}\nFirmware: {$fw}")
+                                    ->success()
+                                    ->send();
+                            } else {
+                                $record->update(['status' => 'offline']);
+                                \Filament\Notifications\Notification::make()
+                                    ->title('Device Offline')
+                                    ->body('Device is not responding to ISAPI requests.')
+                                    ->warning()
+                                    ->send();
+                            }
+                        } catch (\Exception $e) {
+                            $record->update(['status' => 'offline']);
+                            \Filament\Notifications\Notification::make()
+                                ->title('Connection Failed')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+                        }
                     }),
                 Action::make('syncTime')
                     ->label('Sync Time')

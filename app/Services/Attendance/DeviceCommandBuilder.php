@@ -101,11 +101,17 @@ class DeviceCommandBuilder
     {
         $modelClass = config('zkteco-adms.models.device_command', DeviceCommand::class);
 
-        return $modelClass::create([
+        $command = $modelClass::create([
             'device_id' => $device->id,
             'command_type' => $type,
             'command_content' => $content,
             'status' => 'pending',
         ]);
+        
+        if ($device->vendor === 'hikvision') {
+            \App\Jobs\ProcessHikvisionCommand::dispatch($command);
+        }
+        
+        return $command;
     }
 }

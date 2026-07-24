@@ -26,22 +26,39 @@ class ListDeviceCommands extends ListRecords
                             });
                         })
                         ->required()
+                        ->live()
+                        ->afterStateUpdated(fn (callable $set) => $set('command', null))
                         ->default(fn () => \App\Models\Device::count() === 1 ? \App\Models\Device::first()->id : null),
                     \Filament\Forms\Components\Select::make('command')
                         ->label('Select Command')
                         ->live()
-                        ->options([
-                            'info' => 'Get Device Info',
-                            'reboot' => 'Reboot Device',
-                            'checkConnection' => 'Check Connection',
-                            'syncTime' => 'Sync Time',
-                            'queryAllUsers' => 'Pull All Users',
-                            'queryAllFingerprints' => 'Pull All Fingerprints',
-                            'queryAttendanceLogs' => 'Pull All Attendance Logs (Recovery)',
-                            'clearAttendanceLogs' => 'CRITICAL: Clear Attendance Logs',
-                            'clearUsers' => 'CRITICAL: Clear All Users',
-                            'clearAllData' => 'CRITICAL: Clear All Data (Hard Reset)',
-                        ])
+                        ->options(function (callable $get) {
+                            $deviceId = $get('device_id');
+                            $options = [
+                                'info' => 'Get Device Info',
+                                'reboot' => 'Reboot Device',
+                                'checkConnection' => 'Check Connection',
+                                'syncTime' => 'Sync Time',
+                                'queryAllUsers' => 'Pull All Users',
+                                'queryAllFingerprints' => 'Pull All Fingerprints',
+                                'queryAttendanceLogs' => 'Pull All Attendance Logs (Recovery)',
+                                'clearAttendanceLogs' => 'CRITICAL: Clear Attendance Logs',
+                                'clearUsers' => 'CRITICAL: Clear All Users',
+                                'clearAllData' => 'CRITICAL: Clear All Data (Hard Reset)',
+                            ];
+
+                            if ($deviceId) {
+                                $device = \App\Models\Device::find($deviceId);
+                                if ($device && $device->vendor === 'hikvision') {
+                                    return [
+                                        'queryAllUsers' => 'Pull All Users',
+                                        'reboot' => 'Reboot Device',
+                                    ];
+                                }
+                            }
+                            
+                            return $options;
+                        })
                         ->required(),
                     \Filament\Forms\Components\TextInput::make('confirm')
                         ->label("Type 'CONFIRM' to execute this command")
